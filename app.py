@@ -47,7 +47,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         return
     
-    if fruitsearch_mode:
+    if fruitsearch_mode == True:
         crop_name = user_text
         url = "https://data.moa.gov.tw/Service/OpenData/DataFileService.aspx?UnitId=B82&IsTransData=1"
         data = requests.get(url).json()
@@ -71,12 +71,9 @@ def handle_message(event):
         else:
             msg = f"查無「{crop_name}」的相關資料，請確認名稱是否正確。"
 
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
-        return
-    else:
-        reply = f"你說了：{user_text}"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-
+    reply = f"你說了：{user_text}"
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+    return
 
 
 
