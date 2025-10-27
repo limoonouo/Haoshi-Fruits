@@ -3,6 +3,8 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
+import requests
+
 app = Flask(__name__)
 
 # ⚠️ 換成你的 LINE Channel 資料
@@ -37,9 +39,47 @@ def callback():
 # 回覆文字訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
+    global search_mode 
     user_text = event.message.text
-    reply = f"你說了：{user_text}"
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+    if user_text == "水果品項":
+        fruitsearch_mode = True
+        msg = "請輸入想查詢的水果名稱，例如：百香果、鳳梨、芭樂"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+        return
+    
+    if fruitsearch_mode:
+
+        crop_name = user_text
+        url = "https://data.moa.gov.tw/Service/OpenData/DataFileService.aspx?UnitId=B82&IsTransData=1"
+        data = requests.get(url).json()
+        result = None
+        for item in data:
+            if crop_name in item["品項"]:
+                result = item
+                break
+        if result:
+            msg = (
+                f"🍎品項：{result['品項']}\n"
+                f"📅主要產期：{result['主要產期']}\n"
+                f"📍主要產地：{result['主要產地']}"
+            )
+        else:
+            msg = f"查無「{crop_name}」的相關資料，請確認名稱是否正確。"
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+        return
+    else:
+        reply = f"你說了：{user_text}"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+
+
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     # 允許外部訪問，Cloudflare Tunnel 需要
