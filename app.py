@@ -37,16 +37,20 @@ def callback():
     return 'OK', 200
 
 # 回覆文字訊息
-fruitsearch_mode = False  
+ffruitsearch_mode = False
+
+# 全域讀取 CSV，只做一次
 try:
-    with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
+    with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8-sig") as f:
         data = list(csv.DictReader(f))
 except Exception:
     data = []
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     global fruitsearch_mode
     user_text = event.message.text.strip()
+    messages = []
 
     # 進入搜尋模式
     if user_text == "水果品項":
@@ -54,16 +58,13 @@ def handle_message(event):
         all_fruits = [item["品項"] for item in data]
         fruits_text = "、".join(all_fruits)
         msg = f"請輸入想查詢的水果名稱，目前可查詢品項有：\n{fruits_text}"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
-        return
+        messages.append(TextSendMessage(text=msg))
 
     # 搜尋模式
-    if fruitsearch_mode:
+    elif fruitsearch_mode:
         crop_name = user_text
-        fruitsearch_mode = False  # 查完一次重置
-
+        fruitsearch_mode = False
         result = next((item for item in data if crop_name in item["品項"]), None)
-
         if result:
             msg = (
                 f"🍎品項：{result['品項']}\n"
@@ -72,13 +73,15 @@ def handle_message(event):
             )
         else:
             msg = f"查無「{crop_name}」的相關資料，請確認名稱是否正確。"
-
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
-        return
+        messages.append(TextSendMessage(text=msg))
 
     # 一般回覆
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"你說了：{user_text}"))
+    else:
+        messages.append(TextSendMessage(text=f"你說了：{user_text}"))
 
+    # 一次回覆多條訊息
+    if messages:
+        line_bot_api.reply_message(event.reply_token, messages)
 
     # 一般回覆（非搜尋模式）
     reply = f"你說了：{user_text}"
