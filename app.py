@@ -47,8 +47,10 @@ def handle_message(event):
     if user_text == "水果品項":
         fruitsearch_mode = True
         try:
+            TextSendMessage(text="正在讀取開放資料，請稍後")
             with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
                 data = csv.DictReader(f)
+            TextSendMessage(text="開放資料讀取完畢")
         except Exception:
             line_bot_api.reply_message(
                 event.reply_token,
@@ -69,8 +71,10 @@ def handle_message(event):
         fruitsearch_mode = False  # 查完一次後關閉搜尋模式
         crop_name = user_text
         try:
+            TextSendMessage(text="正在讀取開放資料，請稍後")
             with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
                 data = csv.DictReader(f)
+            TextSendMessage(text="開放資料讀取完畢")
         except Exception as e:
             line_bot_api.reply_message(
                 event.reply_token,
