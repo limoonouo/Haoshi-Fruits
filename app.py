@@ -39,7 +39,7 @@ def callback():
 # 回覆文字訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global search_mode 
+    global fruitsearch_mode 
     user_text = event.message.text
     if user_text == "水果品項":
         fruitsearch_mode = True
@@ -48,7 +48,6 @@ def handle_message(event):
         return
     
     if fruitsearch_mode:
-
         crop_name = user_text
         url = "https://data.moa.gov.tw/Service/OpenData/DataFileService.aspx?UnitId=B82&IsTransData=1"
         data = requests.get(url).json()
