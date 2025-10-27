@@ -51,6 +51,12 @@ def handle_message(event):
         crop_name = user_text
         url = "https://data.moa.gov.tw/Service/OpenData/DataFileService.aspx?UnitId=B82&IsTransData=1"
         data = requests.get(url).json()
+        try:
+            data = requests.get(url, timeout=10).json()  # 增加 timeout 避免卡死
+        except Exception as e:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 開放資料連線異常，請稍後再試。"))
+            fruitsearch_mode = False
+            return
         result = None
         for item in data:
             if crop_name in item["品項"]:
