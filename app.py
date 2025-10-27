@@ -38,6 +38,11 @@ def callback():
 
 # 回覆文字訊息
 fruitsearch_mode = False  
+try:
+    with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
+        data = list(csv.DictReader(f))
+except Exception:
+    data = []
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     global fruitsearch_mode
@@ -46,48 +51,18 @@ def handle_message(event):
     # 進入搜尋模式
     if user_text == "水果品項":
         fruitsearch_mode = True
-        try:
-            TextSendMessage(text="正在讀取開放資料，請稍後")
-            with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
-                data = csv.DictReader(f)
-            TextSendMessage(text="開放資料讀取完畢")
-        except Exception:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="⚠️ 無法讀取水果資料檔，請稍後再試。")
-            )
-            return
-
-        # 取得所有品項
         all_fruits = [item["品項"] for item in data]
         fruits_text = "、".join(all_fruits)
-
         msg = f"請輸入想查詢的水果名稱，目前可查詢品項有：\n{fruits_text}"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         return
 
-    # 若目前在搜尋模式
+    # 搜尋模式
     if fruitsearch_mode:
-        fruitsearch_mode = False  # 查完一次後關閉搜尋模式
         crop_name = user_text
-        try:
-            TextSendMessage(text="正在讀取開放資料，請稍後")
-            with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
-                data = csv.DictReader(f)
-            TextSendMessage(text="開放資料讀取完畢")
-        except Exception as e:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="⚠️ 開放資料連線異常，請稍後再試。")
-            )
-            return
+        fruitsearch_mode = False  # 查完一次重置
 
-        # 搜尋水果名稱
-        result = None
-        for item in data:
-            if crop_name in item["品項"]:
-                result = item
-                break
+        result = next((item for item in data if crop_name in item["品項"]), None)
 
         if result:
             msg = (
@@ -100,6 +75,10 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         return
+
+    # 一般回覆
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"你說了：{user_text}"))
+
 
     # 一般回覆（非搜尋模式）
     reply = f"你說了：{user_text}"
