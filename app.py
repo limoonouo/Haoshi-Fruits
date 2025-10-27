@@ -4,7 +4,7 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 import requests
-
+import csv
 app = Flask(__name__)
 
 # ⚠️ 換成你的 LINE Channel 資料
@@ -46,7 +46,21 @@ def handle_message(event):
     # 進入搜尋模式
     if user_text == "水果品項":
         fruitsearch_mode = True
-        msg = "請輸入想查詢的水果名稱，例如：百香果、鳳梨、芭樂"
+        try:
+            with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
+                data = csv.DictReader(f)
+        except Exception:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="⚠️ 無法讀取水果資料檔，請稍後再試。")
+            )
+            return
+
+        # 取得所有品項
+        all_fruits = [item["品項"] for item in data]
+        fruits_text = "、".join(all_fruits)
+
+        msg = f"請輸入想查詢的水果名稱，目前可查詢品項有：\n{fruits_text}"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         return
 
@@ -54,10 +68,9 @@ def handle_message(event):
     if fruitsearch_mode:
         fruitsearch_mode = False  # 查完一次後關閉搜尋模式
         crop_name = user_text
-        url = "https://data.moa.gov.tw/Service/OpenData/DataFileService.aspx?UnitId=B82&IsTransData=1"
-
         try:
-            data = requests.get(url, timeout=10).json()
+            with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8") as f:
+                data = csv.DictReader(f)
         except Exception as e:
             line_bot_api.reply_message(
                 event.reply_token,
