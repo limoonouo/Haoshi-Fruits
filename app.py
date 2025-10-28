@@ -64,17 +64,17 @@ def handle_message(event):
     elif fruitsearch_mode:
         fruitsearch_mode = False
         crop_name = user_text
-        results = df[df["作物名稱"].str.contains(crop_name, case=False, na=False)]
+        results = df[df["產品"].str.contains(crop_name, case=False, na=False)]
 
         if not results.empty:
             latest_date = results["交易日期"].max()
-            recent_data = results[results["交易日期"] == latest_date]
+            recent_data = results[results["日期"] == latest_date]
 
             reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢品項：{crop_name}\n\n"
             for _, row in recent_data.iterrows():
                 reply_text += (
-                    f"🏬 市場：{row['市場名稱']}\n"
-                    f"💰 平均價：{row['平均價']} 元/公斤\n"
+                    f"🏬 市場：{row['市場']}\n"
+                    f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
                     "------------------------\n"
                 )
         else:
