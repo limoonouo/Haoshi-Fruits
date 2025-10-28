@@ -2,6 +2,7 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from difflib import get_close_matches
 import os
 import requests
 import csv
@@ -48,39 +49,43 @@ try:
 except Exception as e:
     print("讀取資料錯誤:", e)
     df = pd.DataFrame()
-
+user_state = {} 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global fruitsearch_mode, df
+    user_id = event.source.user_id
     user_text = event.message.text.strip()
     messages = []
 
     # 進入搜尋模式
     if user_text == "即時資訊":
-        fruitsearch_mode = True
+        user_state[user_id] = "search"
         msg = "請輸入想查詢的水果名稱（例如：香蕉、芭樂、火龍果）"
         messages.append(TextSendMessage(text=msg))
         line_bot_api.reply_message(event.reply_token, messages)
-        return  # 這裡要 return，不然會繼續往下執行
+        return
 
     # 搜尋模式
-    if fruitsearch_mode:
-        fruitsearch_mode = False
+    if user_state.get(user_id) == "search":
+        # 結束搜尋模式
+        user_state[user_id] = None
         crop_name = user_text
 
-        # 避免欄位名稱有空白或奇怪字元
-        df.columns = df.columns.str.strip()
+        all_crops = df["產品"].dropna().astype(str).unique().tolist()
+        close_matches = get_close_matches(crop_name, all_crops, n=5, cutoff=0.3)
 
-        # 關鍵字搜尋「產品」
-        results = df[df["產品"].astype(str).str.contains(crop_name, case=False, na=False)]
+        if not close_matches:
+            results = df[df["產品"].astype(str).str.contains(crop_name, case=False, na=False)]
+        else:
+            results = df[df["產品"].isin(close_matches)]
 
         if not results.empty:
             latest_date = results["日期"].max()
             recent_data = results[results["日期"] == latest_date]
 
-            reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢品項：{crop_name}\n\n"
+            reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢關鍵字：{crop_name}\n\n"
             for _, row in recent_data.iterrows():
                 reply_text += (
+                    f"🥭 品項：{row['產品']}\n"
                     f"🏬 市場：{row['市場']}\n"
                     f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
                     f"📦 交易量：{row['交易量(公斤)']} 公斤\n"
@@ -93,7 +98,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, messages)
         return
 
-    # 若非搜尋模式
+    # 非搜尋模式
     messages.append(TextSendMessage(text=f"你說了：{user_text}"))
     line_bot_api.reply_message(event.reply_token, messages)
 
