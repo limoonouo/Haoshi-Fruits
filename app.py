@@ -51,8 +51,7 @@ user_state = {}
 # 嘗試讀取 CSV
 try:
     df = pd.read_csv("水果產品日交易行情.csv", encoding="utf-8-sig")
-    df.columns = df.columns.str.strip().str.replace('\ufeff', '', regex=True)
-
+    df.columns = df.columns.str.replace(r'\s+', '', regex=True).str.replace('\ufeff','')
     # 🔹 清除欄位內所有空白（全形與半形）
     df["產品"] = (
         df["產品"]
