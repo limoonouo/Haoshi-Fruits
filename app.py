@@ -51,14 +51,14 @@ user_state = {}
 # 嘗試讀取 CSV
 try:
     df = pd.read_csv("水果產品日交易行情.csv", encoding="utf-8-sig")
+    print("欄位名稱：", df.columns.tolist())
+
+    # 清理欄位名稱
     df.columns = df.columns.str.replace(r'\s+', '', regex=True).str.replace('\ufeff','')
-    # 🔹 清除欄位內所有空白（全形與半形）
-    df["產品"] = (
-        df["產品"]
-        .astype(str)
-        .str.replace(r"\s+", "", regex=True)   # 半形空格
-        .str.replace(r"　+", "", regex=True)   # 全形空格
-    )
+
+    # 🔹 清理產品欄位
+    df["產品_clean"] = df["產品"].astype(str).str.replace(r"[\s　]+", "", regex=True)       # 去掉所有空格
+    df["產品_name_only"] = df["產品"].astype(str).str.replace(r"^\d+\s*", "", regex=True)   # 去掉前面編號，只保留名稱
 
     print("✅ 成功讀入資料，欄位如下：", df.columns.tolist())
 except Exception as e:
@@ -72,7 +72,7 @@ def handle_message(event):
         user_text = event.message.text.strip()
         messages = []
 
-        print(f"📩 收到使用者輸入：{user_text}")  # ←偵錯用
+        print(f"📩 收到使用者輸入：{user_text}")  # 偵錯用
 
         # 進入搜尋模式
         if user_text == "即時資訊":
@@ -84,34 +84,26 @@ def handle_message(event):
         # 搜尋模式
         if user_state.get(user_id) == "search":
             user_state[user_id] = None
-            crop_name = re.sub(r"[\s　]+", "", user_text)
-            print(f"🔍 搜尋關鍵字：{crop_name}")  # ←偵錯用
+            crop_name_input = re.sub(r"[\s　]+", "", user_text)
+            print(f"🔍 搜尋關鍵字：{crop_name_input}")
 
             try:
                 required_cols = ["日期", "市場", "產品", "平均價(元/公斤)", "交易量(公斤)"]
                 if not all(col in df.columns for col in required_cols):
                     raise KeyError(f"欄位名稱不符，目前 CSV 欄位：{df.columns.tolist()}")
 
-                df["產品"] = (
-                    df["產品"]
-                    .astype(str)
-                    .str.replace(r"\s+", "", regex=True)
-                    .str.replace(r"　+", "", regex=True)
-                )
+                # 先用名稱欄位搜尋（去掉前面編號）
+                results = df[df["產品_name_only"].str.contains(crop_name_input, case=False, na=False)]
 
-                all_crops = df["產品"].dropna().unique().tolist()
-                close_matches = get_close_matches(crop_name, all_crops, n=5, cutoff=0.3)
-
-                if not close_matches:
-                    results = df[df["產品"].astype(str).str.contains(crop_name, case=False, na=False)]
-                else:
-                    results = df[df["產品"].isin(close_matches)]
+                # 若找不到，再用完整清理欄位搜尋
+                if results.empty:
+                    results = df[df["產品_clean"].str.contains(crop_name_input, case=False, na=False)]
 
                 if not results.empty:
                     latest_date = results["日期"].max()
                     recent_data = results[results["日期"] == latest_date]
 
-                    reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢關鍵字：{crop_name}\n\n"
+                    reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢關鍵字：{crop_name_input}\n\n"
                     for _, row in recent_data.iterrows():
                         reply_text += (
                             f"🥭 品項：{row['產品']}\n"
@@ -121,7 +113,7 @@ def handle_message(event):
                             "------------------------\n"
                         )
                 else:
-                    reply_text = f"查無「{crop_name}」的市場價格資料。"
+                    reply_text = f"查無「{crop_name_input}」的市場價格資料。"
 
             except Exception as e:
                 reply_text = f"⚠️ 錯誤：{e}"
@@ -139,6 +131,10 @@ def handle_message(event):
 
         # 非搜尋模式
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"你說了：{user_text}"))
+
+    except Exception as e:
+        print("❌ 錯誤：", e)
+        traceback.print_exc(file=sys.stdout)
 
     except Exception as e:
         print("❌ 錯誤：", e)
