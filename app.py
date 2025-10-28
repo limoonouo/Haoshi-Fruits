@@ -5,6 +5,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 import requests
 import csv
+import pandas as pd
 app = Flask(__name__)
 
 # ⚠️ 換成你的 LINE Channel 資料
@@ -41,10 +42,12 @@ ffruitsearch_mode = False
 
 # 全域讀取 CSV，只做一次
 try:
-    with open("東部地區時令水果產期資訊.csv", "r", encoding="utf-8-sig") as f:
-        data = list(csv.DictReader(f))
-except Exception:
-    data = []
+    df = pd.read_excel("水果產品日交易行情.xls")
+    # 假設資料有欄位：「作物名稱」、「市場名稱」、「平均價」、「交易日期」
+    # 根據實際檔案的欄名調整
+except Exception as e:
+    print("讀取資料錯誤:", e)
+    df = pd.DataFrame()
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -53,39 +56,37 @@ def handle_message(event):
     messages = []
 
     # 進入搜尋模式
-    if user_text == "水果品項":
+    if user_text == "市場價格":
         fruitsearch_mode = True
-        all_fruits = [item["品項"] for item in data]
-        fruits_text = "、".join(all_fruits)
-        msg = f"請輸入想查詢的水果名稱，目前可查詢品項有：\n{fruits_text}"
+        msg = "請輸入想查詢的水果名稱"
         messages.append(TextSendMessage(text=msg))
 
-    # 搜尋模式
     elif fruitsearch_mode:
-        crop_name = user_text
         fruitsearch_mode = False
-        result = next((item for item in data if crop_name in item["品項"]), None)
-        if result:
-            msg = (
-                f"🍎品項：{result['品項']}\n"
-                f"📅主要產期：{result['主要產期']}\n"
-                f"📍主要產地：{result['主要產地']}"
-            )
-        else:
-            msg = f"查無「{crop_name}」的相關資料，請確認名稱是否正確。"
-        messages.append(TextSendMessage(text=msg))
+        crop_name = user_text
+        results = df[df["作物名稱"].str.contains(crop_name, case=False, na=False)]
 
-    # 一般回覆
+        if not results.empty:
+            latest_date = results["交易日期"].max()
+            recent_data = results[results["交易日期"] == latest_date]
+
+            reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢品項：{crop_name}\n\n"
+            for _, row in recent_data.iterrows():
+                reply_text += (
+                    f"🏬 市場：{row['市場名稱']}\n"
+                    f"💰 平均價：{row['平均價']} 元/公斤\n"
+                    "------------------------\n"
+                )
+        else:
+            reply_text = f"查無「{crop_name}」的市場價格資料。"
+
+        messages.append(TextSendMessage(text=reply_text))
+
     else:
         messages.append(TextSendMessage(text=f"你說了：{user_text}"))
 
-    # 一次回覆多條訊息
     if messages:
         line_bot_api.reply_message(event.reply_token, messages)
-
-    # 一般回覆（非搜尋模式）
-    reply = f"你說了：{user_text}"
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
 
 
