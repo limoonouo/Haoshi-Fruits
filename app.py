@@ -51,23 +51,31 @@ except Exception as e:
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global fruitsearch_mode
+    global fruitsearch_mode, df
     user_text = event.message.text.strip()
     messages = []
 
     # 進入搜尋模式
     if user_text == "即時資訊":
         fruitsearch_mode = True
-        msg = "請輸入想查詢的水果名稱"
+        msg = "請輸入想查詢的水果名稱（例如：香蕉、芭樂、火龍果）"
         messages.append(TextSendMessage(text=msg))
+        line_bot_api.reply_message(event.reply_token, messages)
+        return  # 這裡要 return，不然會繼續往下執行
 
-    elif fruitsearch_mode:
+    # 搜尋模式
+    if fruitsearch_mode:
         fruitsearch_mode = False
         crop_name = user_text
-        results = df[df["產品"].str.contains(crop_name, case=False, na=False)]
+
+        # 避免欄位名稱有空白或奇怪字元
+        df.columns = df.columns.str.strip()
+
+        # 關鍵字搜尋「產品」
+        results = df[df["產品"].astype(str).str.contains(crop_name, case=False, na=False)]
 
         if not results.empty:
-            latest_date = results["交易日期"].max()
+            latest_date = results["日期"].max()
             recent_data = results[results["日期"] == latest_date]
 
             reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢品項：{crop_name}\n\n"
@@ -75,18 +83,19 @@ def handle_message(event):
                 reply_text += (
                     f"🏬 市場：{row['市場']}\n"
                     f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
+                    f"📦 交易量：{row['交易量(公斤)']} 公斤\n"
                     "------------------------\n"
                 )
         else:
             reply_text = f"查無「{crop_name}」的市場價格資料。"
 
         messages.append(TextSendMessage(text=reply_text))
-
-    else:
-        messages.append(TextSendMessage(text=f"你說了：{user_text}"))
-
-    if messages:
         line_bot_api.reply_message(event.reply_token, messages)
+        return
+
+    # 若非搜尋模式
+    messages.append(TextSendMessage(text=f"你說了：{user_text}"))
+    line_bot_api.reply_message(event.reply_token, messages)
 
 
 
