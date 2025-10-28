@@ -42,7 +42,7 @@ ffruitsearch_mode = False
 
 # 全域讀取 CSV，只做一次
 try:
-    df = pd.read_excel("水果產品日交易行情.xls")
+    df = pd.read_csv("水果產品日交易行情.csv", encoding="utf-8-sig")
     # 假設資料有欄位：「作物名稱」、「市場名稱」、「平均價」、「交易日期」
     # 根據實際檔案的欄名調整
 except Exception as e:
@@ -56,7 +56,7 @@ def handle_message(event):
     messages = []
 
     # 進入搜尋模式
-    if user_text == "市場價格":
+    if user_text == "即時資訊":
         fruitsearch_mode = True
         msg = "請輸入想查詢的水果名稱"
         messages.append(TextSendMessage(text=msg))
