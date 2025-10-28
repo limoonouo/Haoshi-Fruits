@@ -88,7 +88,7 @@ def handle_message(event):
             print(f"🔍 搜尋關鍵字：{crop_name_input}")
 
             try:
-                required_cols = ["日期", "市場", "產品", "平均價(元/公斤)", "交易量(公斤)"]
+                required_cols = ["日期", "市場", "產品", "平均價(元/公斤)", "價格增減%"]
                 if not all(col in df.columns for col in required_cols):
                     raise KeyError(f"欄位名稱不符，目前 CSV 欄位：{df.columns.tolist()}")
 
@@ -109,7 +109,7 @@ def handle_message(event):
                             f"🥭 品項：{row['產品']}\n"
                             f"🏬 市場：{row['市場']}\n"
                             f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
-                            f"📦 交易量：{row['交易量(公斤)']} 公斤\n"
+                            f"📦 與前一天價格相比：{row['價格增減%']} %\n"
                             "------------------------\n"
                         )
                 else:
@@ -136,9 +136,7 @@ def handle_message(event):
         print("❌ 錯誤：", e)
         traceback.print_exc(file=sys.stdout)
 
-    except Exception as e:
-        print("❌ 錯誤：", e)
-        traceback.print_exc(file=sys.stdout)
+
 
 
 
