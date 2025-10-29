@@ -61,10 +61,17 @@ except Exception as e:
 
 # 產期資料（新的）
 try:
-    df_crop = pd.read_csv("每月盛產農產品產地.csv", encoding="utf-8-sig")
+    df_crop = pd.read_csv(
+        "每月盛產農產品產地.csv",
+        encoding="utf-8-sig",
+        on_bad_lines="skip",
+        engine="python"
+    )
     df_crop.columns = df_crop.columns.str.replace(r'\s+', '', regex=True).str.replace('\ufeff', '')
+    df_crop = df_crop.applymap(lambda x: str(x).strip().replace("　", "") if isinstance(x, str) else x)
     df_crop.fillna("", inplace=True)
-    print("✅ 成功讀入產期資料。")
+    print(f"✅ 成功讀入產期資料，共 {len(df_crop)} 筆。")
+    print(df_crop[df_crop["品項"].astype(str).str.contains("你測不到的那個關鍵字", na=False)])
 except Exception as e:
     print("❌ 無法讀入產期資料:", e)
     df_crop = pd.DataFrame()
@@ -161,7 +168,21 @@ def handle_message(event):
         messages = []
 
         print(f"📩 收到使用者輸入：{user_text}")
-
+        if user_text == "輔助工具":
+            user_state[user_id] = "search"
+            msg = "很抱歉，輔助工具目前尚未開發完畢🙏\n你可以使用月份、蔬果種類、鄉鎮市等進行查詢功能\n也可以使用即時資訊進行市場價查詢"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+            return
+        if user_text == "答題果園":
+            user_state[user_id] = "search"
+            msg = "很抱歉，答題果園目前尚未開發完畢🙏\n你可以使用月份、蔬果種類、鄉鎮市等進行查詢功能\n也可以使用即時資訊進行市場價查詢"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+            return
+        if user_text == "本周水果報":
+            user_state[user_id] = "search"
+            msg = "很抱歉，本周水果報目前尚未開發完畢🙏\n你可以使用月份、蔬果種類、鄉鎮市等進行查詢功能\n也可以使用即時資訊進行市場價查詢"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+            return
         # -------------------- #
         # 即時查詢入口
         # -------------------- #
@@ -228,9 +249,9 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, messages)
             return
 
-        # -------------------- #
-        # 🔹 二、月份查詢 → 查有哪些品項
-        # 範例：「7月有什麼水果」
+                # -------------------- #
+        # 🔹 二、月份查詢 → 查有哪些品項（支援類型分段）
+        # 範例：「7月有什麼水果」或「7月有什麼農產品」
         # -------------------- #
         month_match = re.search(r"(\d{1,2})\s*月", user_text)
         if month_match:
@@ -256,19 +277,43 @@ def handle_message(event):
                 month_data = month_data[month_data["類型"].astype(str).str.contains(crop_type, na=False)]
 
             if not month_data.empty:
-                items = list(dict.fromkeys(month_data["品項"].astype(str).tolist()))
-                if len(items) > 30:
-                    items = items[:30]  # 限制最多30項，避免回覆過長
-                joined_items = "、".join(items)
                 if crop_type:
+                    # ✅ 有指定類型，直接列出品項
+                    items = list(dict.fromkeys(month_data["品項"].astype(str).tolist()))
+                    if len(items) > 30:
+                        items = items[:30]
+                    joined_items = "、".join(items)
                     reply_text = f"{month_num}月的{crop_type}有：{joined_items}。"
                 else:
-                    reply_text = f"{month_num}月盛產的農產品有：{joined_items}。"
+                    # ✅ 沒指定類型 → 分類分段顯示
+                    grouped = month_data.groupby("類型")
+                    reply_text = f"🍀 {month_num}月盛產的農產品如下：\n=====================\n"
+
+                    for gtype in TYPE_KEYWORDS:
+                        if gtype in grouped.groups:
+                            sub = grouped.get_group(gtype)
+                            items = list(dict.fromkeys(sub["品項"].astype(str).tolist()))
+                            if len(items) > 30:
+                                items = items[:30]
+                            joined_items = "、".join(items)
+                            reply_text += f"【{gtype}】\n{joined_items}\n---------------------\n"
+
+                    # 額外處理不在 TYPE_KEYWORDS 的其他類型
+                    other_types = [t for t in grouped.groups.keys() if t not in TYPE_KEYWORDS]
+                    for t in other_types:
+                        sub = grouped.get_group(t)
+                        items = list(dict.fromkeys(sub["品項"].astype(str).tolist()))
+                        if len(items) > 30:
+                            items = items[:30]
+                        joined_items = "、".join(items)
+                        reply_text += f"【{t}】\n{joined_items}\n---------------------\n"
+
             else:
                 reply_text = f"❌ 查無 {month_num} 月的{crop_type or '農產品'}資料。"
 
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
             return
+
         # -------------------- #
         # 偵測地區查詢（支援分項分類顯示）
         # -------------------- #
@@ -298,8 +343,6 @@ def handle_message(event):
                     # ✅ 若有指定 crop_type，維持舊格式
                     if crop_type:
                         items = list(dict.fromkeys(region_data["品項"].astype(str).tolist()))
-                        if len(items) > 30:
-                            items = items[:30]
                         joined_items = "、".join(items)
                         reply_text = f"{shown_region}盛產的{crop_type}有：{joined_items}。"
 
@@ -339,7 +382,7 @@ def handle_message(event):
 
         # -------------------- #
         # 自動偵測產期查詢（主功能）
-        # -------------------- #
+         # -------------------- #
         crop_inputs = re.split(r"[、,，\s]+", user_text)
         crop_inputs = [normalize_crop_name(c) for c in crop_inputs if c]
 
@@ -361,12 +404,31 @@ def handle_message(event):
             if not results.empty:
                 found_any = True
                 reply_text += f"🍀 查詢作物：{crop_input}\n=====================\n"
-                for _, row in results.iterrows():
+
+                # ✅ 合併相同項目的不同月份
+                # 以 類型、品項、品種、縣市 為群組鍵，將月份合併
+                grouped = (
+                    results.groupby(["類型", "品項", "品種", "縣市"], dropna=False)
+                    .agg({"月份": lambda x: "、".join(sorted(set(str(v) for v in x if str(v).strip())))})
+                    .reset_index()
+                )
+
+                # 輸出整理後的結果
+                for _, row in grouped.iterrows():
                     parts = []
-                    for col in ["類型", "月份", "品項", "品種", "縣市"]:
-                        if col in results.columns and str(row[col]).strip():
-                            parts.append(f"{col}：{row[col]}")
+                    if "類型" in row and str(row["類型"]).strip():
+                        parts.append(f"類型：{row['類型']}")
+                    if "品項" in row and str(row["品項"]).strip():
+                        parts.append(f"品項：{row['品項']}")
+                    if "品種" in row and str(row["品種"]).strip():
+                        parts.append(f"品種：{row['品種']}")
+                    if "縣市" in row and str(row["縣市"]).strip():
+                        parts.append(f"縣市：{row['縣市']}")
+                    if "月份" in row and str(row["月份"]).strip():
+                        parts.append(f"月份：{row['月份']}")
+
                     reply_text += "\n".join(parts) + "\n---------------------\n"
+
             else:
                 reply_text += f"❌ 查無 {crop_input} 的產期資料。\n---------------------\n"
 
@@ -380,6 +442,7 @@ def handle_message(event):
         import traceback
         print(traceback.format_exc())
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 系統發生錯誤，請稍後再試。"))
+
 
     # 除錯訊息（保留）
     try:
