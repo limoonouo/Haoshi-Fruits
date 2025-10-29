@@ -72,23 +72,27 @@ except Exception as e:
 # ----------- 輔助函式區 -----------
 
 CITY_MAP = {
-    "台北": ["臺北市"],
+    "台北": ["台北市"],
+    "臺北": ["台北市"],
     "新北": ["新北市"],
     "基隆": ["基隆市", "基隆縣"],
     "桃園": ["桃園市"],
     "新竹": ["新竹市", "新竹縣"],
     "苗栗": ["苗栗縣"],
-    "台中": ["臺中市"],
+    "台中": ["台中市"],
+    "臺中": ["台中市"],
     "彰化": ["彰化縣"],
     "南投": ["南投縣"],
     "雲林": ["雲林縣"],
     "嘉義": ["嘉義市", "嘉義縣"],
-    "台南": ["臺南市"],
+    "台南": ["台南市"],
+    "臺南": ["台南市"],
     "高雄": ["高雄市"],
     "屏東": ["屏東縣"],
     "宜蘭": ["宜蘭縣"],
     "花蓮": ["花蓮縣"],
-    "台東": ["臺東縣"],
+    "台東": ["台東縣"],
+    "臺東": ["台東縣"],
     "澎湖": ["澎湖縣"],
     "金門": ["金門縣"],
     "連江": ["連江縣"]
@@ -225,6 +229,47 @@ def handle_message(event):
             return
 
         # -------------------- #
+        # 🔹 二、月份查詢 → 查有哪些品項
+        # 範例：「7月有什麼水果」
+        # -------------------- #
+        month_match = re.search(r"(\d{1,2})\s*月", user_text)
+        if month_match:
+            month_num = int(month_match.group(1))
+            print(f"📅 偵測到月份查詢：{month_num}月")
+
+            # 檢查資料
+            if df_crop.empty:
+                reply_text = "⚠️ 尚未載入產期資料，請稍後再試。"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+                return
+
+            # 嘗試判斷是否有指定類型（水果、蔬菜等）
+            crop_type = None
+            for t in TYPE_KEYWORDS + list(TYPE_ALIASES.keys()):
+                if t in user_text:
+                    crop_type = TYPE_ALIASES.get(t, t)
+                    break
+
+            # 篩選該月份資料
+            month_data = df_crop[df_crop["月份"].astype(str).str.contains(f"{month_num}", na=False)]
+            if crop_type:
+                month_data = month_data[month_data["類型"].astype(str).str.contains(crop_type, na=False)]
+
+            if not month_data.empty:
+                items = list(dict.fromkeys(month_data["品項"].astype(str).tolist()))
+                if len(items) > 30:
+                    items = items[:30]  # 限制最多30項，避免回覆過長
+                joined_items = "、".join(items)
+                if crop_type:
+                    reply_text = f"{month_num}月的{crop_type}有：{joined_items}。"
+                else:
+                    reply_text = f"{month_num}月盛產的農產品有：{joined_items}。"
+            else:
+                reply_text = f"❌ 查無 {month_num} 月的{crop_type or '農產品'}資料。"
+
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+            return
+        # -------------------- #
         # 偵測地區查詢（支援分項分類顯示）
         # -------------------- #
         regions, crop_type = detect_region_and_type(user_text)
@@ -268,8 +313,6 @@ def handle_message(event):
                             if gtype in grouped.groups:
                                 sub = grouped.get_group(gtype)
                                 items = list(dict.fromkeys(sub["品項"].astype(str).tolist()))
-                                if len(items) > 20:
-                                    items = items[:20]
                                 joined_items = "、".join(items)
                                 reply_text += f"【{gtype}】\n{joined_items}\n---------------------\n"
 
@@ -278,8 +321,6 @@ def handle_message(event):
                         for t in other_types:
                             sub = grouped.get_group(t)
                             items = list(dict.fromkeys(sub["品項"].astype(str).tolist()))
-                            if len(items) > 20:
-                                items = items[:20]
                             joined_items = "、".join(items)
                             reply_text += f"【{t}】\n{joined_items}\n---------------------\n"
 
@@ -330,7 +371,7 @@ def handle_message(event):
                 reply_text += f"❌ 查無 {crop_input} 的產期資料。\n---------------------\n"
 
         if not found_any:
-            reply_text = "⚠️ 未找到相關水果資料，請確認輸入是否正確。"
+            reply_text = f"⚠️錯誤的回訊方式"
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
