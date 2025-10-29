@@ -3,6 +3,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from difflib import get_close_matches
+from threading import Thread
 import os
 import requests
 import csv
@@ -11,6 +12,7 @@ import logging
 import traceback
 import sys
 import re
+
 app = Flask(__name__)
 
 # ⚠️ 換成你的 LINE Channel 資料
@@ -249,7 +251,7 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, messages)
             return
 
-                # -------------------- #
+        # -------------------- #
         # 🔹 二、月份查詢 → 查有哪些品項（支援類型分段）
         # 範例：「7月有什麼水果」或「7月有什麼農產品」
         # -------------------- #
@@ -442,13 +444,6 @@ def handle_message(event):
         import traceback
         print(traceback.format_exc())
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 系統發生錯誤，請稍後再試。"))
-
-
-    # 除錯訊息（保留）
-    try:
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"收到了：{user_text}"))
-    except Exception as e:
-        print("⚠️ 無法回覆除錯訊息：", e)
 
 
 
