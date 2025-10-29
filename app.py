@@ -51,20 +51,104 @@ user_state = {}
 # 嘗試讀取 CSV
 try:
     df = pd.read_csv("水果產品日交易行情.csv", encoding="utf-8-sig")
-    print("欄位名稱：", df.columns.tolist())
-
-    # 清理欄位名稱
-    df.columns = df.columns.str.replace(r'\s+', '', regex=True).str.replace('\ufeff','')
-
-    # 🔹 清理產品欄位
-    df["產品_clean"] = df["產品"].astype(str).str.replace(r"[\s　]+", "", regex=True)       # 去掉所有空格
-    df["產品_name_only"] = df["產品"].astype(str).str.replace(r"^\d+\s*", "", regex=True)   # 去掉前面編號，只保留名稱
-
-    print("✅ 成功讀入資料，欄位如下：", df.columns.tolist())
+    df.columns = df.columns.str.replace(r'\s+', '', regex=True).str.replace('\ufeff', '')
+    df["產品_clean"] = df["產品"].astype(str).str.replace(r"[\s　]+", "", regex=True)
+    df["產品_name_only"] = df["產品"].astype(str).str.replace(r"^\d+\s*", "", regex=True)
+    print("✅ 成功讀入即時行情資料。")
 except Exception as e:
-    print("❌ 讀取資料錯誤:", e)
+    print("❌ 無法讀入即時行情資料:", e)
     df = pd.DataFrame()
 
+# 產期資料（新的）
+try:
+    df_crop = pd.read_csv("每月盛產農產品產地.csv", encoding="utf-8-sig")
+    df_crop.columns = df_crop.columns.str.replace(r'\s+', '', regex=True).str.replace('\ufeff', '')
+    df_crop.fillna("", inplace=True)
+    print("✅ 成功讀入產期資料。")
+except Exception as e:
+    print("❌ 無法讀入產期資料:", e)
+    df_crop = pd.DataFrame()
+
+# ----------- 輔助函式區 -----------
+
+CITY_MAP = {
+    "台北": ["臺北市"],
+    "新北": ["新北市"],
+    "基隆": ["基隆市", "基隆縣"],
+    "桃園": ["桃園市"],
+    "新竹": ["新竹市", "新竹縣"],
+    "苗栗": ["苗栗縣"],
+    "台中": ["臺中市"],
+    "彰化": ["彰化縣"],
+    "南投": ["南投縣"],
+    "雲林": ["雲林縣"],
+    "嘉義": ["嘉義市", "嘉義縣"],
+    "台南": ["臺南市"],
+    "高雄": ["高雄市"],
+    "屏東": ["屏東縣"],
+    "宜蘭": ["宜蘭縣"],
+    "花蓮": ["花蓮縣"],
+    "台東": ["臺東縣"],
+    "澎湖": ["澎湖縣"],
+    "金門": ["金門縣"],
+    "連江": ["連江縣"]
+}
+
+TYPE_KEYWORDS = ["水果", "蔬菜", "花卉", "雜糧"]
+
+# 🆕 類型同義詞補充
+TYPE_ALIASES = {
+    "果類": "水果",
+    "蔬果": "蔬菜",
+    "糧食": "雜糧"
+}
+
+def detect_region_and_type(user_text: str):
+    """偵測輸入文字中的地區與類型"""
+    regions, crop_type = [], None
+
+    # ✅ 改進：可同時偵測多個地區
+    for short, full_list in CITY_MAP.items():
+        if short in user_text:
+            regions.extend(full_list)
+
+    # ✅ 改進：支援別名轉換（果類→水果、蔬果→蔬菜等）
+    for t in TYPE_KEYWORDS + list(TYPE_ALIASES.keys()):
+        if t in user_text:
+            crop_type = TYPE_ALIASES.get(t, t)
+            break
+
+    return regions, crop_type
+
+
+def normalize_crop_name(name: str) -> str:
+    """統一使用者輸入名稱格式"""
+    return re.sub(r"[\s　]+", "", name)
+
+def match_crop_in_period_data(keyword: str):
+    """以品項名稱模糊搜尋產期資料"""
+    keyword = normalize_crop_name(keyword)
+    match_rule = df_crop[
+        df_crop["品項"].astype(str).str.contains(keyword, case=False, na=False)
+    ]
+    return match_rule
+
+def expand_fruit_alias(keyword: str):
+    """模糊關鍵字補全（同義詞轉換）"""
+    mapping = {
+        "釋迦": "番荔枝",
+        "棗子": "印度棗",
+        "梨子": "梨",
+        "芭樂": "番石榴",
+        "橘子": "柑"
+    }
+    for k, v in mapping.items():
+        if k in keyword:
+            return v
+    return keyword
+
+# ----------- 主處理邏輯 -----------
+required_cols = ["日期", "市場", "產品", "平均價(元/公斤)", "價格增減%"]
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     try:
@@ -72,30 +156,33 @@ def handle_message(event):
         user_text = event.message.text.strip()
         messages = []
 
-        print(f"📩 收到使用者輸入：{user_text}")  # 偵錯用
+        print(f"📩 收到使用者輸入：{user_text}")
 
-        # 進入搜尋模式
+        # -------------------- #
+        # 即時查詢入口
+        # -------------------- #
         if user_text == "即時資訊":
             user_state[user_id] = "search"
             msg = "請輸入想查詢的水果名稱（例如：香蕉、芭樂、火龍果）"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
             return
 
-        # 搜尋模式
+        # -------------------- #
+        # 即時查詢模式
+        # -------------------- #
         if user_state.get(user_id) == "search":
             user_state[user_id] = None
             crop_name_input = re.sub(r"[\s　]+", "", user_text)
             print(f"🔍 搜尋關鍵字：{crop_name_input}")
 
             try:
-                required_cols = ["日期", "市場", "產品", "平均價(元/公斤)", "價格增減%"]
+                if df.empty:
+                    raise ValueError("即時行情資料尚未載入")
+
                 if not all(col in df.columns for col in required_cols):
                     raise KeyError(f"欄位名稱不符，目前 CSV 欄位：{df.columns.tolist()}")
 
-                # 先用名稱欄位搜尋（去掉前面編號）
                 results = df[df["產品_name_only"].str.contains(crop_name_input, case=False, na=False)]
-
-                # 若找不到，再用完整清理欄位搜尋
                 if results.empty:
                     results = df[df["產品_clean"].str.contains(crop_name_input, case=False, na=False)]
 
@@ -103,43 +190,33 @@ def handle_message(event):
                     latest_date = results["日期"].max()
                     recent_data = results[results["日期"] == latest_date]
 
-                    reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢關鍵字：{crop_name_input}\n\n"
+                    reply_text = f"📅 最新交易日期：{latest_date}\n🍎 查詢關鍵字：{crop_name_input}\n------------------------\n"
                     for _, row in recent_data.iterrows():
-                        if int(row['價格增減%']) < 0:
-                            reply_text += (
-                                f"🥭 品項：{row['產品']}\n"
-                                f"🏬 市場：{row['市場']}\n"
-                                f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
-                                f"📉 與前一天價格相比：{row['價格增減%']} %\n"
-                                "------------------------\n"
-                            )
-                        elif int(row['價格增減%']) > 0:
-                            reply_text += (
-                                f"🥭 品項：{row['產品']}\n"
-                                f"🏬 市場：{row['市場']}\n"
-                                f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
-                                f"📈 與前一天價格相比：{row['價格增減%']} %\n"
-                                "------------------------\n"
-                            )
-                        else:
-                            reply_text += (
-                                f"🥭 品項：{row['產品']}\n"
-                                f"🏬 市場：{row['市場']}\n"
-                                f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
-                                f"💲 與前一天價格相比：{row['價格增減%']} %\n"
-                                "------------------------\n"
-                            )
-                        
+                        try:
+                            change = float(row['價格增減%'])
+                        except ValueError:
+                            change = 0
+                        arrow = "📈" if change > 0 else "📉" if change < 0 else "💲"
+
+                        reply_text += (
+                            f"🥭 品項：{row['產品']}\n"
+                            f"🏬 市場：{row['市場']}\n"
+                            f"💰 平均價：{row['平均價(元/公斤)']} 元/公斤\n"
+                            f"{arrow} 價格漲幅(%)：{row['價格增減%']} %\n"
+                            "------------------------\n"
+                        )
                 else:
                     reply_text = f"查無「{crop_name_input}」的市場價格資料。"
 
             except Exception as e:
+                import traceback
+                print(traceback.format_exc())  # ✅ 顯示完整錯誤
                 reply_text = f"⚠️ 錯誤：{e}"
 
             # 分段回覆
             max_len = 1900
             if len(reply_text) > max_len:
-                chunks = [reply_text[i:i+max_len] for i in range(0, len(reply_text), max_len)]
+                chunks = [reply_text[i:i + max_len] for i in range(0, len(reply_text), max_len)]
                 messages = [TextSendMessage(text=chunk) for chunk in chunks]
             else:
                 messages = [TextSendMessage(text=reply_text)]
@@ -147,14 +224,127 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, messages)
             return
 
-        # 非搜尋模式
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"你說了：{user_text}"))
+        # -------------------- #
+        # 偵測地區查詢（支援分項分類顯示）
+        # -------------------- #
+        regions, crop_type = detect_region_and_type(user_text)
+        if regions:
+            print(f"🗺️ 偵測到地區：{regions}, 類型：{crop_type}")
+
+            try:
+                if df_crop.empty:
+                    raise ValueError("產期資料尚未載入")
+
+                # ✅ 可多縣市查詢
+                region_data = pd.concat([
+                    df_crop[df_crop["縣市"].astype(str).str.contains(region, na=False)]
+                    for region in regions
+                ], ignore_index=True)
+
+                if crop_type:
+                    # ✅ 若有明確類型，僅顯示該類型
+                    region_data = region_data[
+                        region_data["類型"].astype(str).str.contains(crop_type, na=False)
+                    ]
+
+                if not region_data.empty:
+                    shown_region = "、".join([r.replace("臺", "台") for r in regions])
+
+                    # ✅ 若有指定 crop_type，維持舊格式
+                    if crop_type:
+                        items = list(dict.fromkeys(region_data["品項"].astype(str).tolist()))
+                        if len(items) > 30:
+                            items = items[:30]
+                        joined_items = "、".join(items)
+                        reply_text = f"{shown_region}盛產的{crop_type}有：{joined_items}。"
+
+                    else:
+                        # ✅ 沒有指定類型 → 依類型分組顯示
+                        grouped = region_data.groupby("類型")
+                        reply_text = f"🍀 {shown_region}盛產項目如下：\n"
+                        reply_text += "=====================\n"
+
+                        for gtype in TYPE_KEYWORDS:
+                            if gtype in grouped.groups:
+                                sub = grouped.get_group(gtype)
+                                items = list(dict.fromkeys(sub["品項"].astype(str).tolist()))
+                                if len(items) > 20:
+                                    items = items[:20]
+                                joined_items = "、".join(items)
+                                reply_text += f"【{gtype}】\n{joined_items}\n---------------------\n"
+
+                        # 若有額外類型（不在預設四種）
+                        other_types = [t for t in grouped.groups.keys() if t not in TYPE_KEYWORDS]
+                        for t in other_types:
+                            sub = grouped.get_group(t)
+                            items = list(dict.fromkeys(sub["品項"].astype(str).tolist()))
+                            if len(items) > 20:
+                                items = items[:20]
+                            joined_items = "、".join(items)
+                            reply_text += f"【{t}】\n{joined_items}\n---------------------\n"
+
+                else:
+                    shown_region = "、".join([r.replace("臺", "台") for r in regions])
+                    reply_text = f"❌ 查無 {shown_region} 的{crop_type or '農產品'}資料。"
+
+            except Exception as e:
+                import traceback
+                print(traceback.format_exc())
+                reply_text = f"⚠️ 查詢地區資料時發生錯誤：{e}"
+
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+            return
+
+
+        # -------------------- #
+        # 自動偵測產期查詢（主功能）
+        # -------------------- #
+        crop_inputs = re.split(r"[、,，\s]+", user_text)
+        crop_inputs = [normalize_crop_name(c) for c in crop_inputs if c]
+
+        if not crop_inputs:
+            msg = "請輸入水果名稱，例如：香蕉、芭樂、火龍果"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+            return
+
+        reply_text = ""
+        found_any = False
+
+        for crop_input in crop_inputs:
+            alias = expand_fruit_alias(crop_input)
+            results = match_crop_in_period_data(crop_input)
+
+            if results.empty and alias != crop_input:
+                results = match_crop_in_period_data(alias)
+
+            if not results.empty:
+                found_any = True
+                reply_text += f"🍀 查詢作物：{crop_input}\n=====================\n"
+                for _, row in results.iterrows():
+                    parts = []
+                    for col in ["類型", "月份", "品項", "品種", "縣市"]:
+                        if col in results.columns and str(row[col]).strip():
+                            parts.append(f"{col}：{row[col]}")
+                    reply_text += "\n".join(parts) + "\n---------------------\n"
+            else:
+                reply_text += f"❌ 查無 {crop_input} 的產期資料。\n---------------------\n"
+
+        if not found_any:
+            reply_text = "⚠️ 未找到相關水果資料，請確認輸入是否正確。"
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        return
 
     except Exception as e:
-        print("❌ 錯誤：", e)
-        traceback.print_exc(file=sys.stdout)
+        import traceback
+        print(traceback.format_exc())
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 系統發生錯誤，請稍後再試。"))
 
-
+    # 除錯訊息（保留）
+    try:
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"收到了：{user_text}"))
+    except Exception as e:
+        print("⚠️ 無法回覆除錯訊息：", e)
 
 
 
