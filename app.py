@@ -153,7 +153,8 @@ def expand_fruit_alias(keyword: str):
         "棗子": "印度棗",
         "梨子": "梨",
         "芭樂": "番石榴",
-        "橘子": "柑"
+        "橘子": "柑",
+        "柳丁": "柳橙"
     }
     for k, v in mapping.items():
         if k in keyword:
@@ -170,11 +171,24 @@ def handle_message(event):
         messages = []
 
         print(f"📩 收到使用者輸入：{user_text}")
+        # -------------------- #
+        # 品項查詢（列出所有不重複品項）
+        # -------------------- #
         if user_text == "輔助工具":
-            user_state[user_id] = "search"
-            msg = "很抱歉，輔助工具目前尚未開發完畢🙏\n你可以使用月份、蔬果種類、鄉鎮市等進行查詢功能\n也可以使用即時資訊進行市場價查詢"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+            try:
+                if df_crop.empty:
+                    reply_text = "⚠️ 尚未載入產期資料，請稍後再試。"
+                else:
+                    items = sorted(set(df_crop["品項"].dropna().astype(str).tolist()))
+                    reply_text = "很抱歉，輔助工具目前尚未開發完畢🙏\n你可以使用月份、蔬果種類、鄉鎮市等進行查詢功能\n📋所有可以查詢的品項如下：\n" + "、".join(items)
+            except Exception as e:
+                import traceback
+                print(traceback.format_exc())
+                reply_text = f"⚠️ 查詢品項時發生錯誤：{e}"
+
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
             return
+
         if user_text == "答題果園":
             user_state[user_id] = "search"
             msg = "很抱歉，答題果園目前尚未開發完畢🙏\n你可以使用月份、蔬果種類、鄉鎮市等進行查詢功能\n也可以使用即時資訊進行市場價查詢"
