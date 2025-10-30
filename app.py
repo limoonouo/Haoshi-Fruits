@@ -464,7 +464,7 @@ def handle_message(event):
                 reply_text += f"❌ 查無 {crop_input} 的產期資料。\n---------------------\n"
 
         if not found_any:
-            reply_text = f"⚠️錯誤的回訊方式"
+            reply_text = f"⚠️錯誤的回訊方式，可以點擊輔助功能來確認可查詢的品項"
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
