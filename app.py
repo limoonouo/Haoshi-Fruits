@@ -226,7 +226,7 @@ def handle_message(event):
         # -------------------- #
         if user_text == "即時資訊":
             user_state[user_id] = "search"
-            msg = "請輸入想查詢的水果名稱（例如：香蕉、芭樂、火龍果）"
+            msg = "請輸入想查詢的水果名稱（例如：香蕉、芭樂、火龍果）\n點擊連結查看未來一周的氣象預報\nhttps://www.cwa.gov.tw/V8/C/W/week.html"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
             return
 
