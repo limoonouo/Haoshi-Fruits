@@ -115,6 +115,17 @@ TYPE_ALIASES = {
     "蔬果": "蔬菜",
     "糧食": "雜糧"
 }
+chinese_to_num = {
+    "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
+    "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12
+}
+
+def convert_chinese_month_to_number(text: str):
+    """將中文月份轉換成阿拉伯數字（例如：十二月 → 12）"""
+    for ch, num in chinese_to_num.items():
+        if f"{ch}月" in text:
+            return num
+    return None
 
 def detect_region_and_type(user_text: str):
     """偵測輸入文字中的地區與類型"""
@@ -272,9 +283,12 @@ def handle_message(event):
         month_match = re.search(r"(\d{1,2})\s*月", user_text)
         if month_match:
             month_num = int(month_match.group(1))
+        else:
+            month_num = convert_chinese_month_to_number(user_text)
+
+        if month_num:
             print(f"📅 偵測到月份查詢：{month_num}月")
 
-            # 檢查資料
             if df_crop.empty:
                 reply_text = "⚠️ 尚未載入產期資料，請稍後再試。"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
@@ -286,6 +300,7 @@ def handle_message(event):
                 if t in user_text:
                     crop_type = TYPE_ALIASES.get(t, t)
                     break
+
 
             # 篩選該月份資料
             month_data = df_crop[df_crop["月份"].astype(str).str.contains(f"{month_num}", na=False)]
