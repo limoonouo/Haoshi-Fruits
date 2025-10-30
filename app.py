@@ -171,7 +171,18 @@ def expand_fruit_alias(keyword: str):
         if k in keyword:
             return v
     return keyword
-
+def sort_months_numerically(month_series):
+    """將月份依數值大小排序並轉回字串顯示"""
+    months = set()
+    for v in month_series:
+        # 只取出數字部分
+        nums = re.findall(r"\d+", str(v))
+        for n in nums:
+            try:
+                months.add(int(n))
+            except ValueError:
+                pass
+    return "、".join(str(m) for m in sorted(months))
 # ----------- 主處理邏輯 -----------
 required_cols = ["日期", "市場", "產品", "平均價(元/公斤)", "價格增減%"]
 @handler.add(MessageEvent, message=TextMessage)
@@ -439,10 +450,10 @@ def handle_message(event):
                 # ✅ 合併相同項目的不同月份
                 # 以 類型、品項、品種、縣市 為群組鍵，將月份合併
                 grouped = (
-                    results.groupby(["類型", "品項", "品種", "縣市"], dropna=False)
-                    .agg({"月份": lambda x: "、".join(sorted(set(str(v) for v in x if str(v).strip())))})
-                    .reset_index()
-                )
+                        results.groupby(["類型", "品項", "品種", "縣市"], dropna=False)
+                        .agg({"月份": sort_months_numerically})
+                        .reset_index()
+                        )
 
                 # 輸出整理後的結果
                 for _, row in grouped.iterrows():
